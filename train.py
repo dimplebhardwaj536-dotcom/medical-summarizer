@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from pytorch_lightning.loggers import WandbLogger
 import os
 
 from model.transformer import Transformer
@@ -25,21 +24,21 @@ class MedicalSummarizer(pl.LightningModule):
         return self.model(src_ids, tgt_ids, src_mask)
 
     def _shared_step(self, batch):
-    src_ids   = batch["src_ids"]
-    src_mask  = batch["src_mask"]
-    tgt_input = batch["tgt_input"]
-    tgt_label = batch["tgt_label"]
+        src_ids   = batch["src_ids"]
+        src_mask  = batch["src_mask"]
+        tgt_input = batch["tgt_input"]
+        tgt_label = batch["tgt_label"]
 
-    # fix mask shape: (batch, 512) → (batch, 1, 1, 512)
-    src_mask = src_mask.unsqueeze(1).unsqueeze(2)
+        # fix mask shape: (batch, 512) → (batch, 1, 1, 512)
+        src_mask = src_mask.unsqueeze(1).unsqueeze(2)
 
-    logits = self(src_ids, tgt_input, src_mask)
+        logits = self(src_ids, tgt_input, src_mask)
 
-    loss = self.criterion(
-        logits.view(-1, config.VOCAB_SIZE),
-        tgt_label.view(-1)
-    )
-    return loss
+        loss = self.criterion(
+            logits.view(-1, config.VOCAB_SIZE),
+            tgt_label.view(-1)
+        )
+        return loss
 
     def training_step(self, batch, batch_idx):
         loss = self._shared_step(batch)
@@ -61,7 +60,7 @@ class MedicalSummarizer(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=config.LEARNING_RATE,
-            steps_per_epoch=625,   # TRAIN_SAMPLES / BATCH_SIZE
+            steps_per_epoch=625,
             epochs=config.EPOCHS,
             pct_start=0.1
         )
@@ -72,17 +71,13 @@ class MedicalSummarizer(pl.LightningModule):
 
 
 def train():
-    # create dirs
     os.makedirs(config.CHECKPOINT_DIR, exist_ok=True)
     os.makedirs(config.LOG_DIR, exist_ok=True)
 
-    # data
     train_loader, val_loader = get_dataloaders()
 
-    # model
     model = MedicalSummarizer()
 
-    # callbacks
     checkpoint_cb = ModelCheckpoint(
         dirpath=config.CHECKPOINT_DIR,
         filename="best_model",
@@ -99,10 +94,6 @@ def train():
         verbose=True
     )
 
-    # logger — comment out if no wandb account
-    # wandb_logger = WandbLogger(project=config.WANDB_PROJECT)
-
-    # trainer
     trainer = pl.Trainer(
         max_epochs=config.EPOCHS,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
@@ -110,7 +101,6 @@ def train():
         gradient_clip_val=config.GRAD_CLIP,
         log_every_n_steps=config.LOG_EVERY_N_STEPS,
         callbacks=[checkpoint_cb, early_stop_cb],
-        # logger=wandb_logger,
         precision="16-mixed" if torch.cuda.is_available() else 32,
     )
 
