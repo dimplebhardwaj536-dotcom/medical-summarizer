@@ -25,20 +25,21 @@ class MedicalSummarizer(pl.LightningModule):
         return self.model(src_ids, tgt_ids, src_mask)
 
     def _shared_step(self, batch):
-        src_ids   = batch["src_ids"]
-        src_mask  = batch["src_mask"]
-        tgt_input = batch["tgt_input"]   # decoder input
-        tgt_label = batch["tgt_label"]   # what we predict
+    src_ids   = batch["src_ids"]
+    src_mask  = batch["src_mask"]
+    tgt_input = batch["tgt_input"]
+    tgt_label = batch["tgt_label"]
 
-        # forward pass
-        logits = self(src_ids, tgt_input, src_mask)
+    # fix mask shape: (batch, 512) → (batch, 1, 1, 512)
+    src_mask = src_mask.unsqueeze(1).unsqueeze(2)
 
-        # reshape for loss: (batch * seq_len, vocab_size)
-        loss = self.criterion(
-            logits.view(-1, config.VOCAB_SIZE),
-            tgt_label.view(-1)
-        )
-        return loss
+    logits = self(src_ids, tgt_input, src_mask)
+
+    loss = self.criterion(
+        logits.view(-1, config.VOCAB_SIZE),
+        tgt_label.view(-1)
+    )
+    return loss
 
     def training_step(self, batch, batch_idx):
         loss = self._shared_step(batch)
