@@ -11,26 +11,6 @@
 > Built a full Transformer architecture from scratch, trained on real PubMed medical data, and deployed as a live web application.
 
 ---
-
-## 🎬 Demo
-
-**Input:**
-```
-A 45-year-old female patient presented with sudden onset severe headache,
-nausea, vomiting, and photophobia. CT scan showed subarachnoid hemorrhage.
-CT angiography revealed a 7mm saccular aneurysm. Surgical clipping was
-performed successfully within 24 hours.
-```
-
-**Output:**
-```
-A 45-year-old female patient presented with sudden onset severe headache,
-nausea, vomiting and photophobia. CT scan showed subarachnoid hemorrhage
-with blood in the basal cisterns. Patient was started on nimodipine to
-prevent vasospasm.
-```
-
----
 ### Phase 1 — Build Transformer from Scratch 🔨
 Built every component of the Transformer architecture in pure PyTorch
 with zero shortcuts:
