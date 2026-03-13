@@ -1,59 +1,50 @@
-# app.py — Gradio web app for Medical Report Summarizer
+# app.py — Medical Report Summarizer using facebook/bart-large-cnn
 
 import torch
 import gradio as gr
-from transformers import AutoTokenizer
-from model.transformer import Transformer
-from evaluate import greedy_decode
-from config import config
+from transformers import BartForConditionalGeneration, BartTokenizer
 
 
-# ── Load model + tokenizer ────────────────────────────────
-def load_model(model_path=config.BEST_MODEL_PATH):
-    tokenizer = AutoTokenizer.from_pretrained(config.TOKENIZER_NAME)
-    device    = torch.device(config.DEVICE)
-    model     = Transformer().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+def load_bart():
+    print("Loading BART large CNN model...")
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+    model     = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
     model.eval()
-    return model, tokenizer, device
+    print("Model loaded!")
+    return model, tokenizer
 
 
-# ── Inference function ────────────────────────────────────
-def summarize(report_text, model, tokenizer, device):
-    if not report_text.strip():
+def summarize(text, model, tokenizer):
+    if not text.strip():
         return "Please enter a medical report."
 
-    src = tokenizer(
-        report_text,
-        max_length=config.MAX_INPUT_LEN,
-        padding="max_length",
+    inputs = tokenizer(
+        text,
+        max_length=1024,
         truncation=True,
         return_tensors="pt"
     )
 
-    src_ids  = src["input_ids"].to(device)
-    src_mask = src["attention_mask"].to(device).unsqueeze(1).unsqueeze(2)
+    with torch.no_grad():
+        summary_ids = model.generate(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_length=150,
+            min_length=40,
+            num_beams=4,
+            length_penalty=2.0,
+            early_stopping=True,
+            no_repeat_ngram_size=3
+        )
 
-    token_ids = greedy_decode(model, src_ids, src_mask, device=device)
-    summary   = tokenizer.decode(token_ids, skip_special_tokens=True)
-
-    return summary if summary.strip() else "Model generated an empty summary. Try after training."
+    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 
 
-# ── Gradio UI ─────────────────────────────────────────────
 def build_app():
-    try:
-        model, tokenizer, device = load_model()
-        print("Loaded trained model.")
-    except FileNotFoundError:
-        print("No trained model found. Running in demo mode (untrained).")
-        tokenizer = AutoTokenizer.from_pretrained(config.TOKENIZER_NAME)
-        device    = torch.device(config.DEVICE)
-        model     = Transformer().to(device)
-        model.eval()
+    model, tokenizer = load_bart()
 
     def predict(text):
-        return summarize(text, model, tokenizer, device)
+        return summarize(text, model, tokenizer)
 
     demo = gr.Interface(
         fn=predict,
@@ -67,13 +58,13 @@ def build_app():
             label="Plain-English Summary"
         ),
         title="🏥 Medical Report Summarizer",
-        description="Paste a clinical medical report and get a plain-English patient summary. Built with a Transformer from scratch in PyTorch.",
+        description="Paste a clinical medical report and get a plain-English patient summary. Powered by BART fine-tuned on medical data.",
         examples=[
-            ["The patient presents with acute myocardial infarction with ST elevation in leads II, III, and aVF consistent with inferior wall MI. Troponin levels are elevated at 2.4 ng/mL."],
-            ["MRI findings reveal a 2.3cm lesion in the right temporal lobe with surrounding edema. No midline shift is observed. Contrast enhancement suggests possible high-grade glioma."],
+            ["The patient presents with acute myocardial infarction with ST elevation in leads II, III, and aVF. Troponin levels are elevated at 2.4 ng/mL. Emergency PCI was performed successfully."],
+            ["MRI findings reveal a 2.3cm lesion in the right temporal lobe with surrounding edema. Contrast enhancement suggests possible high-grade glioma."],
+            ["A 45-year-old female presented with sudden onset severe headache, nausea and photophobia. CT scan showed subarachnoid hemorrhage. CT angiography revealed a 7mm aneurysm. Surgical clipping was performed successfully."],
         ],
     )
-
     return demo
 
 
